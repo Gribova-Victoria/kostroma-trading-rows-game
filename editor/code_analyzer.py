@@ -1,3 +1,5 @@
+import re
+
 class CodeAnalyzer():
     # типы слов
     COMMENT = 0  # комментарий
@@ -34,7 +36,7 @@ class CodeAnalyzer():
     EXCLAM = '!'
     QUOTE = '"'
     # CARRIAGE_RETURN = '\r'
-    NEWLINE = '\r\n'
+    NEWLINE = '\n'
     SPACE = ' '
 
     # ключевые слова
@@ -42,11 +44,49 @@ class CodeAnalyzer():
               GROUP, GROUP_END, WAIT_AUDIO, WAIT_TEXT, WAIT_END, BACK, ELSE, EXIT, BUTTONS, BUTTONS_END,
               ASTERISK, COLON, DOUBLE_DASH]
 
+    # показывает количество пробелов для каждого отступа
+    INDENT_SPACE_COUNT = 4
+
     def __init__(self):
         pass
 
-    def autocomplete(self, text):
-        pass
+    # TODO: исправить выделение
+    def autocomplete(self, code, analyzed, last_symbol, last_line_number):
+        completion = ''
+        # добавление отступа при переходе на новую строку
+        if last_symbol == self.NEWLINE:
+            # ищем последнюю введённую строку
+            newline_start_idxs = [_.start() for _ in re.finditer(self.NEWLINE, code)]
+            line_end = newline_start_idxs[-1]+len(self.NEWLINE)
+            if len(newline_start_idxs)>1:
+                line_start = newline_start_idxs[-2]+len(self.NEWLINE)
+            else:
+                line_start = 0
+            print([ch for ch in code[line_start:line_end+1]])
+        return completion
+        #     # ищем начало последней введённой строки
+        #     line_start_idx = code[len(code)-len(self.NEWLINE)::-1].find(self.NEWLINE[::-1])
+        #     if line_start_idx == -1:
+        #         # мы переходим с первой строки на вторую
+        #         line_start_idx = 0
+        #     # else:
+        #     #     line_start_idx += 1
+        #     line = code[line_start_idx:]
+        #     print([ch for ch in line])
+        #     space_count = 0
+        #     for symbol in line:
+        #         if symbol == self.SPACE:
+        #             space_count += 1
+        #         else:
+        #             break
+        #     if space_count % self.INDENT_SPACE_COUNT == 0:
+        #         if word_type == self.KEYWORD and word == self.COLON and last_line_number-line_number == 1:
+        #             # если пользователь ввёл двоеточие и нажал на Enter,
+        #             # отступ на следующей строке увеличивается
+        #             space_count += self.INDENT_SPACE_COUNT
+        #         completion += self.SPACE * space_count
+        # return completion
+
 
     def get_words_for_parsing(self, analyzed):
         """Принимает на вход список кортежей, сгенерированный функцией get_words, возвращает список
@@ -62,28 +102,31 @@ class CodeAnalyzer():
                 result.append((word, line_number, word_type))
         return result
 
+    # TODO: разные виды конца строки
 
     def get_words(self, code):
         # # заменяем таб на 4 пробела
         # if text.endswith('\t'):
         #     text[-1] = ' '*4
 
-        result = []  # список кортежей вида (слово, номер_строки, позиция_последнего_символа_в_тексте, тип)
+        analyzed = []  # список кортежей вида (слово, номер_строки, позиция_последнего_символа_в_тексте, тип)
         line_number = 1  # номер текущей строки
         current_word = ''  # текущее исследуемое слово
         current_type = self.UNKNOWN  # тип текущего исследуемого слова
 
+        symbol = ''
         for i, symbol in enumerate(code):
             pos = i+1
             if symbol == '\r':
                 symbol = self.NEWLINE
                 pos += 1
             elif symbol == '\n':
+                symbol = self.NEWLINE
                 continue
             if symbol == self.QUOTE:
                 if current_type == self.STRING:
                     # заканчиваем считывание строки в кавычках
-                    result.append((current_word+symbol,
+                    analyzed.append((current_word+symbol,
                                    line_number-current_word.count(self.NEWLINE),
                                    pos, current_type))
                     current_word = ''
@@ -98,7 +141,7 @@ class CodeAnalyzer():
                 # pos -= 1  # т.к. перед \n следует \r
                 if current_type == self.COMMENT:
                     # комментарий прерывается при переходе на следующую строку
-                    result.append((current_word+symbol, line_number, pos, current_type))
+                    analyzed.append((current_word+symbol, line_number, pos, current_type))
                     current_word = ''
                     current_type = self.UNKNOWN
                     continue
@@ -111,8 +154,8 @@ class CodeAnalyzer():
                symbol != self.SPACE and symbol != self.COLON:
                 # если после ввода ключевого слова пользователь ввёл что-то, кроме
                 # пробела или перевода строки, ключевое слово теряется
-                current_word, _, _, _ = result[-1]
-                del result[-1]
+                current_word, _, _, _ = analyzed[-1]
+                del analyzed[-1]
             if current_type == self.KEYWORD:
                 current_type = self.UNKNOWN
             if current_type == self.UNKNOWN and (symbol == self.NEWLINE or symbol == self.SPACE):
@@ -121,9 +164,10 @@ class CodeAnalyzer():
                 current_word += symbol
             if current_word in self.KWORDS:
                 current_type = self.KEYWORD
-                result.append((current_word, line_number, pos, current_type))
+                analyzed.append((current_word, line_number, pos, current_type))
                 current_word = ''
         if current_type == self.STRING or current_type == self.COMMENT:
-            result.append((current_word, line_number-current_word.count(self.NEWLINE), pos, current_type))
+            analyzed.append((current_word, line_number-current_word.count(self.NEWLINE), pos, current_type))
 
-        return result
+        completion = self.autocomplete(code, analyzed, symbol, line_number)
+        return analyzed, completion
